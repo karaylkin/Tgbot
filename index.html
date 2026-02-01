@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <title>Reader App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" />
+    <style>
+        :root {
+            --app-bg: #000000;
+            --panel-bg: #1c1c1e;
+            --panel-inner-bg: #111112;
+            --accent-purple: #6a6ae4;
+            --text-white: #ffffff;
+            --text-grey: #8e8e93;
+            
+            --reader-bg: #000000;
+            --reader-text: #ffffff;
+            --reader-font: Merriweather;
+            --reader-size: 18px;
+            --reader-line-height: 1.6;
+            --reader-margin: 20px;
+            
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background-color: var(--app-bg);
+            color: var(--text-white);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100dvh; 
+            overflow: hidden; 
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- LIBRARY VIEW --- */
+        .library-header {
+            background: var(--app-bg);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: calc(var(--safe-top) + 10px) 16px 10px 16px;
+        }
+        
+        .search-box {
+            background: #1c1c1e;
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .search-box input {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 17px;
+            width: 100%;
+            outline: none;
+        }
+        .search-box .icon { color: var(--text-grey); font-size: 20px; }
+
+        #library-view {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch; 
+        }
+        
+        .library-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px 16px; /* Больше отступ между рядами */
+            padding: 10px 16px calc(var(--safe-bottom) + 20px) 16px;
+        }
+
+        .book-card { display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+        .book-card:active { opacity: 0.7; transform: scale(0.98); transition: 0.1s; }
+
+        .cover-wrapper {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 2/3.1;
+            background: #333;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .book-cover { width: 100%; height: 100%; object-fit: cover; }
+        .book-title { font-size: 15px; font-weight: 600; line-height: 1.3; margin-top: 4px; }
+        .book-author { font-size: 13px; color: var(--text-grey); margin-bottom: 2px; }
+        
+        /* Progress Row */
+        .progress-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .progress-bar { 
+            flex-grow: 1;
+            height: 4px; 
+            background: #333; 
+            border-radius: 2px; 
+            overflow: hidden; 
+        }
+        .progress-fill { height: 100%; background: white; border-radius: 2px; }
+        .progress-text { font-size: 12px; color: var(--text-grey); font-weight: 500; min-width: 28px; text-align: right; }
+
+
+        /* --- READER VIEW --- */
+        #reader-view {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--reader-bg);
+            color: var(--reader-text);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            height: 100dvh;
+        }
+
+        /* Кнопка настроек "Aa" поверх текста */
+        .reader-top-bar {
+            position: absolute;
+            top: 0; right: 0; left: 0;
+            padding: calc(var(--safe-top) + 10px) 20px 0;
+            display: flex;
+            justify-content: flex-end;
+            z-index: 101;
+            pointer-events: none; /* Пропускаем клики сквозь пустую область */
+        }
+        
+        .aa-button {
+            pointer-events: auto; /* Включаем клики на кнопку */
+            background: rgba(40, 40, 40, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-family: serif;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            /* Инвертируем цвет иконки если фон светлый */
+            transition: background 0.3s, color 0.3s;
+        }
+        
+        /* Стили для светлой темы кнопки */
+        .light-mode-btn {
+            background: rgba(220, 220, 220, 0.6);
+            color: black;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .reader-shell {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .reader-pager {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            scroll-snap-type: y mandatory;
+            padding: calc(var(--safe-top) + 60px) 0 calc(var(--safe-bottom) + 70px) 0;
+        }
+
+        .page {
+            scroll-snap-align: start;
+            min-height: calc(100dvh - 140px);
+            padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75em;
+            line-height: 1.6;
+            font-size: 18px;
+            text-align: justify;
+        }
+
+        .page h1, .page h2, .page h3 { margin: 0.4em 0 0.2em; }
+        .page p { margin: 0; }
+
+        .pager-overlay {
+            position: absolute;
+            left: 0; right: 0; bottom: calc(var(--safe-bottom) + 12px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            pointer-events: none;
+            z-index: 102;
+        }
+
+        .pager-btn {
+            pointer-events: auto;
+            background: rgba(30,30,30,0.8);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: white;
+            width: 42px; height: 42px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+        }
+
+        .pager-indicator {
+            pointer-events: none;
+            background: rgba(30,30,30,0.7);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            color: #fff;
+            min-width: 90px;
+            text-align: center;
+        }
+
+        #brightness-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: black;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* --- SETTINGS MODAL --- */
+        #settings-modal {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: var(--panel-bg);
+            border-radius: 20px 20px 0 0;
+            padding: 20px 20px calc(var(--safe-bottom) + 20px) 20px;
+            z-index: 200;
+            transform: translateY(110%);
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            color: white;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.6);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        #settings-modal.active { transform: translateY(0); }
+
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .modal-title { font-size: 17px; font-weight: 600; }
+        .close-btn { background: #3a3a3c; border: none; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin: 0; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 22px; width: 22px; border-radius: 50%; background: #b0b0b8; margin-top: -9px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #444; border-radius: 2px; }
+        input[type=range].accent-slider::-webkit-slider-thumb { background: var(--accent-purple); }
+
+        .setting-row { margin-bottom: 24px; display: flex; align-items: center; gap: 15px; }
+        
+        .theme-buttons { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%; }
+        .theme-btn { padding: 14px; border-radius: 12px; text-align: center; font-size: 15px; font-weight: 500; cursor: pointer; border: 2px solid transparent;}
+        .theme-btn.active { border-color: var(--accent-purple); }
+        .t-white { background: #fff; color: #000; }
+        .t-sepia { background: #f8f1e3; color: #5f4b32; }
+        .t-black { background: #111; color: #fff; border: 1px solid #333; }
+
+        .font-controls { display: flex; gap: 10px; width: 100%; }
+        .font-selector { flex-grow: 1; background: var(--panel-inner-bg); color: white; border: none; padding: 0 15px; border-radius: 10px; font-size: 16px; height: 44px; }
+        .size-ctrl-group { display: flex; align-items: center; background: var(--panel-inner-bg); border-radius: 10px; padding: 2px; height: 44px; }
+        .size-btn { width: 44px; height: 100%; background: transparent; border: none; color: white; font-size: 22px; cursor: pointer; }
+        .current-size { width: 30px; text-align: center; font-size: 14px; color: var(--text-grey); }
+
+        .layout-box { background: var(--panel-inner-bg); border-radius: 16px; padding: 20px; margin-bottom: 20px; }
+        .layout-row { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+        .layout-row:last-child { margin-bottom: 0; }
+        .layout-icon { color: var(--text-grey); font-size: 24px; }
+        .layout-val { width: 25px; text-align: right; color: var(--text-grey); font-size: 13px; }
+
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+
+    </style>
+</head>
+<body>
+
+    <!-- LIBRARY VIEW -->
+    <div id="library-view">
+        <div class="library-header">
+            <div class="search-box">
+                <span class="material-symbols-rounded icon">search</span>
+                <input type="text" id="search-input" placeholder="Поиск">
+            </div>
+        </div>
+        <div class="library-grid" id="book-grid"></div>
+    </div>
+
+    <!-- READER VIEW -->
+    <div id="brightness-overlay"></div>
+    
+    <div id="reader-view">
+        <!-- Кнопка настроек "Aa" -->
+        <div class="reader-top-bar">
+            <button class="aa-button" id="aa-btn" onclick="toggleSettings()">Aa</button>
+        </div>
+
+        <div class="reader-shell">
+            <div id="reader-pager" class="reader-pager"></div>
+            <div class="pager-overlay">
+                <button class="pager-btn" id="prev-page">‹</button>
+                <div class="pager-indicator" id="page-indicator">1 / 1</div>
+                <button class="pager-btn" id="next-page">›</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal">
+        <div class="modal-header">
+            <span class="modal-title">Настройки чтения</span>
+            <button class="close-btn" onclick="toggleSettings()">
+                <span class="material-symbols-rounded" style="font-size: 18px">close</span>
+            </button>
+        </div>
+
+        <!-- Brightness -->
+        <div class="setting-row">
+            <span class="material-symbols-rounded" style="color:#888">light_mode</span>
+            <input type="range" min="0" max="85" value="0" class="accent-slider" id="brightness-slider">
+        </div>
+
+        <!-- Themes -->
+        <div class="setting-row">
+            <div class="theme-buttons">
+                <div class="theme-btn t-white" onclick="setTheme('white')">White</div>
+                <div class="theme-btn t-sepia" onclick="setTheme('sepia')">Sepia</div>
+                <div class="theme-btn t-black active" onclick="setTheme('black')">Black</div>
+            </div>
+        </div>
+
+        <!-- Font Family & Size -->
+        <div class="setting-row">
+            <div class="font-controls">
+                <select id="font-family" class="font-selector" onchange="changeFont(this.value)">
+                    <option value="Merriweather">Merriweather</option>
+                    <option value="'Times New Roman'">Times New Roman</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Roboto">Roboto</option>
+                    <option value="monospace">Mono</option>
+                </select>
+                
+                <div class="size-ctrl-group">
+                    <button class="size-btn" onclick="changeFontSize(-1)">–</button>
+                    <span class="current-size" id="font-size-val">18</span>
+                    <button class="size-btn" onclick="changeFontSize(1)">+</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Advanced Layout -->
+        <div class="layout-box">
+            <span class="setting-label" style="font-size:10px; color:#666; display:block; margin-bottom:12px; letter-spacing:1px; font-weight:700;">LINE SPACING</span>
+            <div class="layout-row">
+                <span class="material-symbols-rounded layout-icon">format_line_spacing</span>
+                <input type="range" min="12" max="24" value="15" id="line-height-slider">
+                <span class="layout-val" id="lh-val">1.5</span>
+            </div>
+            
+            <span class="setting-label" style="font-size:10px; color:#666; display:block; margin-bottom:12px; letter-spacing:1px; margin-top:15px; font-weight:700;">SIDE MARGINS</span>
+            <div class="layout-row">
+                <span class="material-symbols-rounded layout-icon">padding</span>
+                <input type="range" min="15" max="50" value="20" id="margin-slider">
+                <span class="layout-val" id="margin-val">20</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.setHeaderColor('#000000');
+        tg.setBackgroundColor('#000000');
+
+        const initData = tg.initData || new URLSearchParams(location.search).get('initData') || '';
+
+        const books = [];
+        const dummyText = `
+            <h2>Глава 1</h2>
+            <p>Это пример текста книги. В реальном приложении вы будете загружать текст с вашего сервера /api/files/:id.</p>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum. Cras venenatis euismod malesuada.</p>
+            <p>Nullam ac odio sed non quam auctor consequat. Duis ut urna lectus. Proin fermentum est ut sem tincidunt, ut convallis justo aliquet.</p>
+            <p>Mauris luctus, est eu scelerisque commodo, purus nunc accumsan nisi, at laoreet leo nisi at nunc. Sed eget diam felis. Integer in ullamcorper ex.</p>
+        `.repeat(14);
+
+        // --- Library Logic ---
+        const grid = document.getElementById('book-grid');
+        const searchInput = document.getElementById('search-input');
+        const statusEl = document.createElement('div');
+        statusEl.style.cssText = "padding:12px 16px;color:#8e8e93;font-size:14px;";
+        grid.parentElement.appendChild(statusEl);
+
+        async function apiFetch(path, opts = {}) {
+            const headers = Object.assign({}, opts.headers || {});
+            if (initData) headers['X-Telegram-InitData'] = initData;
+            const res = await fetch(path, { ...opts, headers });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res;
+        }
+
+        async function loadLibrary() {
+            statusEl.textContent = 'Загружаю библиотеку...';
+            try {
+                const res = await apiFetch('/api/library');
+                const data = await res.json();
+                books.splice(0, books.length, ...data.map(item => ({
+                    id: item.file_id,
+                    bookId: item.book_id,
+                    title: item.title || 'Без названия',
+                    author: item.author || 'Автор неизвестен',
+                    cover: item.cover || 'https://placehold.co/400x600/111/FFF?text=Book',
+                    progress: item.current_location ? 30 : 0 // TODO: derive from location
+                })));
+                statusEl.textContent = '';
+            } catch (e) {
+                statusEl.textContent = 'Не удалось загрузить библиотеку, показываю демо.';
+                if (books.length === 0) {
+                    books.push(
+                        { id: 1, title: "1984", author: "Джордж Оруэлл", cover: "https://m.media-amazon.com/images/I/71kxa1-0mfL.jpg", progress: 23 },
+                        { id: 2, title: "Смелость не нравиться", author: "Ичиро Кишими", cover: "https://m.media-amazon.com/images/I/71tBALAHY4L.jpg", progress: 45 },
+                        { id: 3, title: "Граф Монте-Кристо", author: "Александр Дюма", cover: "https://m.media-amazon.com/images/I/91+1Su40DwL._AC_UF1000,1000_QL80_.jpg", progress: 1 }
+                    );
+                }
+            }
+            renderBooks();
+        }
+
+        function renderBooks(filterText = '') {
+            grid.innerHTML = '';
+            const filtered = books.filter(b => b.title.toLowerCase().includes(filterText.toLowerCase()));
+            
+            filtered.forEach(book => {
+                const div = document.createElement('div');
+                div.className = 'book-card';
+                div.onclick = () => openBook(book);
+                div.innerHTML = `
+                    <div class="cover-wrapper">
+                        <img src="${book.cover}" class="book-cover" loading="lazy">
+                    </div>
+                    <div>
+                        <div class="book-title">${book.title}</div>
+                        <div class="book-author">${book.author}</div>
+                        <div class="progress-row">
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${book.progress}%"></div>
+                            </div>
+                            <span class="progress-text">${book.progress}%</span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(div);
+            });
+
+            if (filtered.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = "padding:24px;color:#8e8e93;font-size:14px;";
+                empty.textContent = "Ничего не найдено";
+                grid.appendChild(empty);
+            }
+        }
+        searchInput.addEventListener('keyup', (e) => renderBooks(e.target.value));
+
+        // --- Reader Logic ---
+        const libraryView = document.getElementById('library-view');
+        const readerView = document.getElementById('reader-view');
+        const readerPager = document.getElementById('reader-pager');
+        const settingsModal = document.getElementById('settings-modal');
+        const pageIndicator = document.getElementById('page-indicator');
+        const prevBtn = document.getElementById('prev-page');
+        const nextBtn = document.getElementById('next-page');
+
+        let currentPages = 1;
+        let currentPageIndex = 0;
+
+        async function openBook(book) {
+            libraryView.style.display = 'none';
+            readerView.style.display = 'flex';
+            readerPager.innerHTML = '<div class="page"><p>Загружаю текст…</p></div>';
+            currentPages = 1;
+            currentPageIndex = 0;
+            updateIndicator();
+            tg.BackButton.show();
+
+            try {
+                const res = await apiFetch(`/api/files/${book.id}`);
+                const text = await res.text();
+                paginateText(`<h1>${book.title}</h1>` + text);
+            } catch (e) {
+                paginateText(`<h1>${book.title}</h1>${dummyText}`);
+            }
+            readerPager.scrollTop = 0;
+        }
+
+        tg.BackButton.onClick(() => {
+            if (settingsModal.classList.contains('active')) {
+                toggleSettings();
+            } else {
+                readerView.style.display = 'none';
+                libraryView.style.display = 'block';
+                tg.BackButton.hide();
+            }
+        });
+
+        function toggleSettings() { settingsModal.classList.toggle('active'); }
+
+        // --- Settings Logic ---
+        // Brightness
+        document.getElementById('brightness-slider').oninput = (e) => {
+            document.getElementById('brightness-overlay').style.opacity = e.target.value / 100;
+        };
+
+        // Theme
+        function setTheme(theme) {
+            document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.t-${theme}`).classList.add('active');
+            
+            const root = document.documentElement;
+            const aaBtn = document.getElementById('aa-btn');
+            
+            if (theme === 'white') {
+                root.style.setProperty('--reader-bg', '#ffffff');
+                root.style.setProperty('--reader-text', '#000000');
+                aaBtn.classList.add('light-mode-btn'); // Кнопка становится темной
+            } else if (theme === 'sepia') {
+                root.style.setProperty('--reader-bg', '#f8f1e3');
+                root.style.setProperty('--reader-text', '#5f4b32');
+                aaBtn.classList.add('light-mode-btn'); // Кнопка становится темной
+            } else {
+                root.style.setProperty('--reader-bg', '#000000');
+                root.style.setProperty('--reader-text', '#ffffff');
+                aaBtn.classList.remove('light-mode-btn'); // Кнопка светлая
+            }
+            repaginate();
+        }
+
+        // Font
+        function changeFont(font) { setStyle('--reader-font', font); repaginate(); }
+
+        // Font Size
+        let currentSize = 18;
+        const sizeDisplay = document.getElementById('font-size-val');
+        function changeFontSize(delta) {
+            currentSize = Math.max(12, Math.min(40, currentSize + delta));
+            setStyle('--reader-size', currentSize + 'px');
+            sizeDisplay.innerText = currentSize;
+            repaginate();
+        }
+
+        // Line Height
+        document.getElementById('line-height-slider').oninput = (e) => {
+            const val = e.target.value / 10;
+            setStyle('--reader-line-height', val);
+            document.getElementById('lh-val').innerText = val;
+            repaginate();
+        };
+
+        // Margins
+        document.getElementById('margin-slider').oninput = (e) => {
+            const val = e.target.value + 'px';
+            setStyle('--reader-margin', val);
+            document.getElementById('margin-val').innerText = e.target.value;
+            repaginate();
+        };
+
+        // Dynamic styles for pagination
+        const rootStyle = document.documentElement.style;
+        function setStyle(varName, value) { rootStyle.setProperty(varName, value); }
+
+        function applyReaderStyles(page) {
+            page.style.fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--reader-font') || 'Merriweather';
+            page.style.fontSize = getComputedStyle(document.documentElement).getPropertyValue('--reader-size') || '18px';
+            page.style.lineHeight = getComputedStyle(document.documentElement).getPropertyValue('--reader-line-height') || '1.6';
+            const margin = getComputedStyle(document.documentElement).getPropertyValue('--reader-margin') || '20px';
+            page.style.paddingLeft = margin;
+            page.style.paddingRight = margin;
+        }
+
+        function paginateText(html) {
+            readerPager.innerHTML = '';
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            readerPager.dataset.currentHtml = html;
+
+            let page = createPage();
+            readerPager.appendChild(page);
+
+            for (const node of Array.from(temp.childNodes)) {
+                addNodeToPage(node);
+            }
+
+            currentPages = readerPager.children.length;
+            currentPageIndex = 0;
+            updateIndicator();
+        }
+
+        function createPage() {
+            const page = document.createElement('div');
+            page.className = 'page';
+            applyReaderStyles(page);
+            return page;
+        }
+
+        function fits(page, node) {
+            page.appendChild(node);
+            const ok = page.scrollHeight <= page.clientHeight + 2;
+            if (!ok) page.removeChild(node);
+            return ok;
+        }
+        function testFits(page, node) {
+            page.appendChild(node);
+            const ok = page.scrollHeight <= page.clientHeight + 2;
+            page.removeChild(node);
+            return ok;
+        }
+
+        function splitNode(node, page) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return splitTextNode(node, page);
+            }
+            if (node.childNodes.length === 0) {
+                return [null, null];
+            }
+            const wrapperA = node.cloneNode(false);
+            const wrapperB = node.cloneNode(false);
+            let moved = false;
+            for (const child of Array.from(node.childNodes)) {
+                const part = child.cloneNode(true);
+                if (testFits(page, part)) {
+                    wrapperA.appendChild(part);
+                    moved = true;
+                } else if (part.nodeType === Node.TEXT_NODE) {
+                    const [t1, t2] = splitTextNode(part, page);
+                    if (t1) wrapperA.appendChild(t1);
+                    if (t2) wrapperB.appendChild(t2);
+                } else {
+                    wrapperB.appendChild(part);
+                }
+            }
+            if (!moved) return [null, node];
+            return [wrapperA, wrapperB];
+        }
+
+        function splitTextNode(node, page) {
+            const words = node.textContent.split(/\s+/);
+            if (words.length <= 1) return [null, node];
+            let low = 1, high = words.length, best = 1;
+            while (low <= high) {
+                const mid = Math.floor((low + high) / 2);
+                const test = document.createTextNode(words.slice(0, mid).join(' '));
+                if (testFits(page, test)) {
+                    best = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            const first = document.createTextNode(words.slice(0, best).join(' '));
+            const secondText = words.slice(best).join(' ');
+            const second = secondText ? document.createTextNode(secondText) : null;
+            return [first, second];
+        }
+
+        function addNodeToPage(node) {
+            let page = readerPager.lastElementChild;
+            const clone = node.cloneNode(true);
+            if (clone.nodeType === Node.TEXT_NODE && clone.textContent.trim() === '') return;
+
+            if (fits(page, clone)) return;
+
+            // Если узел не влез, попробуем разрезать
+            if (clone.nodeType === Node.TEXT_NODE || clone.childNodes.length > 0) {
+                const [partA, partB] = splitNode(clone, page);
+                if (partA) {
+                    if (!fits(page, partA)) {
+                        page = createPage();
+                        readerPager.appendChild(page);
+                    }
+                    page.appendChild(partA);
+                }
+                if (partB) {
+                    page = createPage();
+                    readerPager.appendChild(page);
+                    addNodeToPage(partB);
+                }
+                return;
+            }
+
+            // целиком переносим на новую страницу
+            page = createPage();
+            readerPager.appendChild(page);
+            page.appendChild(clone);
+        }
+
+        function updateIndicator() {
+            pageIndicator.textContent = `${currentPageIndex + 1} / ${Math.max(currentPages, 1)}`;
+        }
+
+        function scrollToPage(idx) {
+            currentPageIndex = Math.max(0, Math.min(currentPages - 1, idx));
+            const page = readerPager.children[currentPageIndex];
+            if (page) page.scrollIntoView({ behavior: 'smooth' });
+            updateIndicator();
+        }
+
+        readerPager.addEventListener('scroll', () => {
+            const first = readerPager.firstElementChild;
+            const pageHeight = first ? first.offsetHeight : readerPager.clientHeight;
+            const idx = pageHeight ? Math.round(readerPager.scrollTop / pageHeight) : 0;
+            if (idx !== currentPageIndex) {
+                currentPageIndex = Math.min(currentPages - 1, Math.max(0, idx));
+                updateIndicator();
+            }
+        });
+
+        prevBtn.onclick = () => scrollToPage(currentPageIndex - 1);
+        nextBtn.onclick = () => scrollToPage(currentPageIndex + 1);
+
+        function repaginate() {
+            const html = readerPager.dataset.currentHtml;
+            if (html) paginateText(html);
+        }
+
+        // Brightness
+        document.getElementById('brightness-slider').oninput = (e) => {
+            document.getElementById('brightness-overlay').style.opacity = e.target.value / 100;
+        };
+
+        // --- Init ---
+        function debounce(fn, ms = 200) {
+            let t;
+            return (...args) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn(...args), ms);
+            };
+        }
+
+        window.addEventListener('resize', debounce(() => repaginate(), 150));
+
+        loadLibrary();
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js').catch(console.warn);
+        }
+    </script>
+</body>
+</html>

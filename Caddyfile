@@ -1,0 +1,17 @@
+{
+	# Optional: set email via env var in docker-compose.
+	email {$LETSENCRYPT_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# Static Mini App (index.html, service-worker.js, manifest.webmanifest)
+	root * /srv
+	file_server
+
+	# Backend API
+	@api path /api/*
+	reverse_proxy @api app:8080
+}
+

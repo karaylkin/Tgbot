@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  # Tor SOCKS5 proxy (needed for .onion FLIBUSTA_URL).
+  tor:
+    image: dperson/torproxy:latest
+    restart: unless-stopped
+    expose:
+      - "9050"
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - tor
+    env_file:
+      - .env
+    environment:
+      # Inside the container, 127.0.0.1 is not the VPS host. Use the tor service instead.
+      TOR_PROXY: tor:9050
+    # Persist DB and downloaded books outside the container.
+    volumes:
+      - ./data:/app/data
+      - ./storage:/app/storage
+    # If you insist on using Tor installed on the VPS host instead of the tor container:
+    # - remove "tor" service + depends_on + environment override above
+    # - set network_mode: host (Linux only)
+    # - keep TOR_PROXY=127.0.0.1:9050
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Values come from the project's .env (or your shell env).
+      DOMAIN: ${DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./index.html:/srv/index.html:ro
+      - ./service-worker.js:/srv/service-worker.js:ro
+      - ./manifest.webmanifest:/srv/manifest.webmanifest:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
